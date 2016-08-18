@@ -80,7 +80,7 @@ def _handle_github_event(payload):
 
             title = pr['title']
             link = 'https://pivotaltracker.com/story/show/{id}'.format(
-                id=1234567890
+                id=pr['head']['ref'].split('-')[0]
             )
             body = "story: {}\r\n{}".format(
                 link,
