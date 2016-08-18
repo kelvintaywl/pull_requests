@@ -62,20 +62,32 @@ class Github(object):
 
 
 def _handle_github_event(payload):
-    if payload.get('action') == 'opened':
-        id = payload.get('number')
-        g = Github(
-            os.getenv('GITHUB_USERNAME'),
-            os.getenv('GITHUB_TOKEN'),
-            GITHUB_OWNER,
-            GITHUB_REPO
-        )
-        pr = g.get_pull_request(id)
-        print(pr)
+    if payload.get('zen'):
+        print('ping pong')
         return None
 
-    elif payload.get('zen'):
-        print('ping pong')
+    action = payload.get('action')
+    if action:
+        if action in ('opened', 'reopened'):
+            id = payload.get('number')
+            g = Github(
+                os.getenv('GITHUB_USERNAME'),
+                os.getenv('GITHUB_TOKEN'),
+                GITHUB_OWNER,
+                GITHUB_REPO
+            )
+            pr = g.get_pull_request(id)
+
+            title = pr['title']
+            link = 'https://pivotaltracker.com/story/show/{id}'.format(
+                id=1234567890
+            )
+            body = "story: {}\r\n{}".format(
+                link,
+                pr['body'])
+
+            g.update_pull_request(id, title=title, body=body)
+
         return None
 
     return ValueError('unable to process action from Github hook')
