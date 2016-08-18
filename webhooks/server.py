@@ -61,16 +61,21 @@ class Github(object):
         )
 
 
-
 def _handle_github_event(payload):
     if payload.get('action') == 'opened':
         id = payload.get('number')
         g = Github(
             os.getenv('GITHUB_USERNAME'),
-            os.getenv('GITHUB_TOKEN')
+            os.getenv('GITHUB_TOKEN'),
+            GITHUB_OWNER,
+            GITHUB_REPO
         )
         pr = g.get_pull_request(id)
         print(pr)
+        return None
+
+    elif payload.get('zen'):
+        print('ping pong')
         return None
 
     return ValueError('unable to process action from Github hook')
@@ -95,4 +100,4 @@ def github_payload():
     if err:
         flask.abort(500)
 
-    return  # empty 200 OK
+    return 'ok'
