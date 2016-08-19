@@ -141,7 +141,6 @@ class Github(object):
         self.repo = repo
 
     def make(self, path, method='get',
-             owner=GITHUB_OWNER, repo=GITHUB_REPO,
              params=None, data=None):
         """
         make API call to Github API.
@@ -149,17 +148,16 @@ class Github(object):
         Args:
             path (str): API sub path
             method (str): lowercase HTTP method (e.g., `get`, `post`)
-            owner (str): name of user/organization on GitHub
-            repo (str): name of repository on GitHub
             params (dict): for GET parameters (querystring)
             data (dict): data paylod for POST requests
         """
 
         url = "{base}/repos/{owner}/{repo}/{path}".format(
             base=GITHUB_API_BASE,
-            owner=owner,
-            repo=repo,
+            owner=self.owner,
+            repo=self.repo,
             path=path)
+        print(url)
         return requests.request(method, url,
                                 params=params, data=data,
                                 auth=(self.api_key, self.api_secret)
@@ -308,9 +306,12 @@ def _validate_pull_request_description(owner, repo, id):
 
 def _handle_github_pull_request_event(payload):
     owner, repo = GITHUB_OWNER, GITHUB_REPO
-    if payload.get('repo'):
-        repo_name = payload['repo']['full_name']
+    if payload.get('repository'):
+        repo_name = payload['repository']['full_name']
         owner, repo = repo_name.split('/', 1)[:2]
+
+    print(owner)
+    print(repo)
 
     if payload.get('zen'):
         # status check
