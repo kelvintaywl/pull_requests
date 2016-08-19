@@ -51,8 +51,6 @@ app.config.update(dict(
     DEBUG=True
 ))
 
-GITHUB_OWNER = 'kelvintaywl'
-GITHUB_REPO = 'pull_requests'
 GITHUB_API_BASE = 'https://api.github.com'
 
 # label name to detect if we should ignore rules when validating
@@ -305,13 +303,10 @@ def _validate_pull_request_description(owner, repo, id):
 
 
 def _handle_github_pull_request_event(payload):
-    owner, repo = GITHUB_OWNER, GITHUB_REPO
+    owner, repo = '', ''
     if payload.get('repository'):
         repo_name = payload['repository']['full_name']
         owner, repo = repo_name.split('/', 1)[:2]
-
-    print(owner)
-    print(repo)
 
     if payload.get('zen'):
         # status check
