@@ -95,6 +95,14 @@ def _prefix_story_link_in_pull_request(id):
     g.update_pull_request(id, title=title, body=body)
 
 
+def _yield_rule_adherence(rules, lines):
+    for desc, rule_fn in rules:
+        if any([rule_fn(line) for line in lines]):
+            yield None
+        else:
+            yield desc
+
+
 def _qualify_description(description):
     """
     Check if description provided is good, based on criterias.
@@ -106,7 +114,19 @@ def _qualify_description(description):
         bool: True if description meets criterias, else False
         list[str]: list of criterias not met, else None
     """
-    return True, None
+    lines = description.split('\n')
+    rules = [
+        (
+            "should have story link",
+            lambda x: bool('story: ' in x)
+        )
+    ]
+
+    issues = [
+        i for i in _yield_rule_adherence(rules, lines)
+        if i is not None
+    ]
+    return not any(issues), issues
 
 
 def _validate_pull_request_description(id):
@@ -125,16 +145,22 @@ def _validate_pull_request_description(id):
                 GITHUB_REPO
             )
     pr = g.get_pull_request(id)
+
     body = pr['body']
-    ok, violations = _qualify_description(body)
-    if ok and not violations:
+    ok, issues = _qualify_description(body)
+    if ok:
         with open(
                 os.path.join(STATIC_DIR, 'good_comment.txt')
         ) as txt:
             comment = txt.read()
             g.comment_on_pull_request(id, comment)
     else:
-        print('uh oh')
+        with open(
+            os.path.join(STATIC_DIR, 'issues.txt')
+        ) as txt:
+            issues_printed = '\n- '.join([''] + issues)
+            comment = txt.read().format(issues=issues_printed)
+        g.comment_on_pull_request(id, comment)
 
 
 def _handle_github_pull_request_event(payload):
