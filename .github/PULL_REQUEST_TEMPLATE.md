@@ -1,5 +1,3 @@
-story: link here
-
 ref: link here for external documents
 
 

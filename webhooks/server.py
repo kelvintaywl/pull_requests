@@ -9,6 +9,9 @@ import flask
 
 app = flask.Flask(__name__)
 
+CURRENT_DIR = os.path.dirname(os.path.realpath(__file__))
+STATIC_DIR = os.path.join(CURRENT_DIR, 'static')
+
 
 app.config.update(dict(
     DEBUG=True
@@ -60,33 +63,95 @@ class Github(object):
             data=json.dumps(data)
         )
 
+    def comment_on_pull_request(self, id, comment):
+        data = {
+            'body': comment
+        }
+        return self.make(
+            'issues/{id}/comments'.format(
+                id=id
+            ),
+            method='post',
+            data=json.dumps(data)
+        )
 
-def _handle_github_event(payload):
-    if payload.get('zen'):
-        print('ping pong')
-        return None
 
-    action = payload.get('action')
-    if action:
-        if action in ('opened', 'reopened'):
-            id = payload.get('number')
-            g = Github(
+def _prefix_story_link_in_pull_request(id):
+    g = Github(
                 os.getenv('GITHUB_USERNAME'),
                 os.getenv('GITHUB_TOKEN'),
                 GITHUB_OWNER,
                 GITHUB_REPO
             )
-            pr = g.get_pull_request(id)
+    pr = g.get_pull_request(id)
 
-            title = pr['title']
-            link = 'https://pivotaltracker.com/story/show/{id}'.format(
-                id=pr['head']['ref'].split('-')[0]
+    title = pr['title']
+    link = 'https://pivotaltracker.com/story/show/{id}'.format(
+        id=pr['head']['ref'].split('-')[0]
+    )
+    body = "story: {}\r\n\n{}".format(
+        link,
+        pr['body'])
+    g.update_pull_request(id, title=title, body=body)
+
+
+def _qualify_description(description):
+    """
+    Check if description provided is good, based on criterias.
+
+    Args:
+        description (str): Pull request description
+
+    Returns:
+        bool: True if description meets criterias, else False
+        list[str]: list of criterias not met, else None
+    """
+    return True, None
+
+
+def _validate_pull_request_description(id):
+    """
+    Validate Pull request's description, and makes comment on the Pull
+    request on quality.
+
+    Args:
+        id (int): Pull request ID
+    """
+
+    g = Github(
+                os.getenv('GITHUB_USERNAME'),
+                os.getenv('GITHUB_TOKEN'),
+                GITHUB_OWNER,
+                GITHUB_REPO
             )
-            body = "story: {}\r\n{}".format(
-                link,
-                pr['body'])
+    pr = g.get_pull_request(id)
+    body = pr['body']
+    ok, violations = _qualify_description(body)
+    if ok and not violations:
+        with open(
+                os.path.join(STATIC_DIR, 'good_comment.txt')
+        ) as txt:
+            comment = txt.read()
+            g.comment_on_pull_request(id, comment)
+    else:
+        print('uh oh')
 
-            g.update_pull_request(id, title=title, body=body)
+
+def _handle_github_pull_request_event(payload):
+    if payload.get('zen'):
+        # status check
+        print('ping pong')
+        return None
+
+    action = payload.get('action')
+    id = payload.get('number')  # pull request ID
+
+    if action:
+        if action in ('opened', 'reopened'):
+            _prefix_story_link_in_pull_request(id)
+
+        if action == 'edited':
+            _validate_pull_request_description(id)
 
         return None
 
@@ -108,7 +173,7 @@ def github_payload():
     if not payload:
         flask.abort(400)
 
-    err = _handle_github_event(payload)
+    err = _handle_github_pull_request_event(payload)
     if err:
         flask.abort(500)
 
