@@ -21,6 +21,40 @@ GITHUB_OWNER = 'kelvintaywl'
 GITHUB_REPO = 'pull_requests'
 GITHUB_API_BASE = 'https://api.github.com'
 
+GITHUB_IGNORE_LABEL = os.getenv('GITHUB_IGNORE_LABEL', 'pr_ignore')
+
+
+class Rule(object):
+
+    def __init__(self, desc, quantifier, fn):
+        self.desc = desc
+        self.quantifier = quantifier
+        self.fn = fn
+
+    def __repr__(self):
+        return self.desc, self.quantifier, self.fn
+
+    def validate(self, lines):
+        if self.quantifier([self.fn(line) for line in lines]):
+            # rule is satisfied
+            return None
+        # else, we return the description of the rule violated
+        return self.desc
+
+
+PR_RULES = {
+    'story': Rule(
+        "should have story link",
+        any,
+        lambda x: bool('story: ' in x)
+    ),
+    'todo': Rule(
+        "all todos should be done",
+        all,
+        lambda x: bool('- [ ]' not in x)
+    )
+}
+
 
 class Github(object):
 
@@ -75,6 +109,14 @@ class Github(object):
             data=json.dumps(data)
         )
 
+    def get_issue(self, id):
+        return self.make(
+            'issues/{id}'.format(
+                id=id
+            ),
+            method='get'
+        )
+
 
 def _prefix_story_link_in_pull_request(id):
     g = Github(
@@ -96,14 +138,11 @@ def _prefix_story_link_in_pull_request(id):
 
 
 def _yield_rule_adherence(rules, lines):
-    for desc, rule_fn in rules:
-        if any([rule_fn(line) for line in lines]):
-            yield None
-        else:
-            yield desc
+    for rule in rules:
+        yield rule.validate(lines)
 
 
-def _qualify_description(description):
+def _qualify_description(description, ignore_list=[]):
     """
     Check if description provided is good, based on criterias.
 
@@ -115,18 +154,16 @@ def _qualify_description(description):
         list[str]: list of criterias not met, else None
     """
     lines = description.split('\n')
-    rules = [
-        (
-            "should have story link",
-            lambda x: bool('story: ' in x)
-        )
-    ]
+    rules = PR_RULES.copy()
+    for rule_name in ignore_list:
+        rules.pop(rule_name)
+
 
     issues = [
-        i for i in _yield_rule_adherence(rules, lines)
+        i for i in _yield_rule_adherence(rules.values(), lines)
         if i is not None
     ]
-    return not any(issues), issues
+    return bool(not any(issues)), issues
 
 
 def _validate_pull_request_description(id):
@@ -147,7 +184,13 @@ def _validate_pull_request_description(id):
     pr = g.get_pull_request(id)
 
     body = pr['body']
-    ok, issues = _qualify_description(body)
+
+    issue = g.get_issue(id)
+    ignore_list = []
+    if 'pr_ignore' in (l['name'] for l in issue['labels']):
+        ignore_list = PR_RULES.keys()
+
+    ok, issues = _qualify_description(body, ignore_list=ignore_list)
     if ok:
         with open(
                 os.path.join(STATIC_DIR, 'good_comment.txt')
@@ -160,7 +203,7 @@ def _validate_pull_request_description(id):
         ) as txt:
             issues_printed = '\n- '.join([''] + issues)
             comment = txt.read().format(issues=issues_printed)
-        g.comment_on_pull_request(id, comment)
+            g.comment_on_pull_request(id, comment)
 
 
 def _handle_github_pull_request_event(payload):
